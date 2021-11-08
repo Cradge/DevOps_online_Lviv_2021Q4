@@ -1,0 +1,23 @@
+ecdb415 HEAD@{0}: merge develop: Fast-forward
+d33fdc9 HEAD@{1}: checkout: moving from develop to master
+ecdb415 HEAD@{2}: merge styles: Merge made by the 'recursive' strategy.
+9c20b4e HEAD@{3}: checkout: moving from styles to develop
+f5e4064 HEAD@{4}: commit: modify index.html in styles to merge with develop
+7a44150 HEAD@{5}: checkout: moving from develop to styles
+9c20b4e HEAD@{6}: reset: moving to HEAD
+9c20b4e HEAD@{7}: checkout: moving from styles to develop
+7a44150 HEAD@{8}: checkout: moving from develop to styles
+9c20b4e HEAD@{9}: commit: modify index.html in develop to merge with styles
+7f127d2 HEAD@{10}: reset: moving to HEAD
+7f127d2 HEAD@{11}: merge images: Fast-forward
+dcfb66f HEAD@{12}: checkout: moving from styles to develop
+7a44150 HEAD@{13}: commit: add href in index.html
+3ee9b2a HEAD@{14}: commit: add styles folder with styles.css in it
+dcfb66f HEAD@{15}: checkout: moving from develop to styles
+dcfb66f HEAD@{16}: checkout: moving from images to develop
+7f127d2 HEAD@{17}: commit: add images source in index.html
+c7b337d HEAD@{18}: commit: add images folder with images inside
+dcfb66f HEAD@{19}: checkout: moving from develop to images
+dcfb66f HEAD@{20}: commit: add empty index.html file
+d33fdc9 HEAD@{21}: checkout: moving from master to develop
+d33fdc9 HEAD@{22}: commit (initial): add a readme.txt file

@@ -2,12 +2,22 @@
 
 <p align="center"><b>1</b></p>
 
-Firstly, I created 2 virtual machines (Ubuntu 20.04) and united them into a working group "MyNetwork". VM1 has 2 network adapters: NAT and Internal. VM2 has only Internal. The internal network is called "MyIntnet". After this, I made port forwarding from VM1 NAT to VM2 Internal. This change allows VM2 to speak with the Internet. All packets sent to VM1 with port 2222 will be redirected to VM2. Port forward rule settings:
+Firstly, I created 2 virtual machines (Ubuntu 20.04) and united them into a working group "MyNetwork". VM1 has 2 network adapters: NAT and Internal. VM2 has only Internal. The internal network is called "MyIntnet". After this, I configured port forwarding from HOST to VM1 NAT. 
+Rule 1 - "Port Forwarding":
 + Protocol - TCP.
-+ Host address - 10.0.2.15.
++ Host address - 192.168.56.1.
 + Host port - 2222.
-+ Guest address - 192.168.1.2.
++ Guest address - 10.0.2.15.
 + Guest port - 22.
+
+Rule 2 - "To VM2":
++ Protocol - TCP.
++ Host address - 192.168.56.1.
++ Host port - 2223.
++ Guest address - 10.0.2.15.
++ Guest port - 2223.
+
+According to the scheme in this task, VM2 speaks with the Internet via VM1.
 
 ![screenshot](screenshots/1.png)
 
@@ -19,7 +29,7 @@ Firstly, I created 2 virtual machines (Ubuntu 20.04) and united them into a work
 <p align="center"><b>2</b></p>
 <p align="center"><b>VM1</b></p>
 
-I set IP address, enabled port forwarding, and configured iptables for this virtual machine.
+I set the IP address, made port forwarding from VM1 to VM2, and configured iptables for this virtual machine.
 
 ```
 sudo ip addr add 192.168.1.1/255.255.255.0 brd 192.168.1.255 dev enp0s8
@@ -33,7 +43,7 @@ sudo sysctl -p
 sudo cat /proc/sys/net/ipv4/ip_forward
 
 sudo iptables -t nat -A POSTROUTING -o enp0s3 -j MASQUERADE
-sudo iptables -t nat -A PREROUTING -i enp0s3 -p tcp --dport 2222 -j DNAT --to-destination 192.168.1.2:22
+sudo iptables -t nat -A PREROUTING -i enp0s3 -p tcp --dport 2223 -j DNAT --to-destination 192.168.1.2:22
 sudo iptables -A FORWARD -p tcp -d 192.168.1.2 --dport 22 -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT
 ip route
 
@@ -86,8 +96,8 @@ network:
 
 ```
 sudo apt install traceroute
-traceroute -I 4.2.2.2
 traceroute -I 192.168.0.106
+traceroute -I 192.168.56.1
 ```
 
 ![screenshot](screenshots/3.png)
@@ -147,4 +157,14 @@ traceroute - I google.com
 ```
 
 ![screenshot](screenshots/8.png)
+
+
+<p align="center"><b>extra</b></p>
+
+```
+ssh -p 2222 mike@192.168.56.1
+ssh -p 2223 mike2@192.168.56.1
+```
+
+![screenshot](screenshots/extra.png)
 

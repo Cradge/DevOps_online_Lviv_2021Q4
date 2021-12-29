@@ -1,0 +1,80 @@
+touch logscan
+chmod ugo+x ./logscan
+
+#!/bin/bash
+
+description () {
+    echo -e "\nThis script is designed to scan Apache logs."
+    echo -e "\nSynopsis:"
+    echo "    logscan -option <file>"
+    echo -e "\nThere are 7 possible keys that give answers to different questions:"
+    echo "    -1 - From which IP were the most requests?"
+    echo "    -2 - What is the most requested page?"
+    echo "    -3 - How many requests were there from each IP?"
+    echo "    -4 - What non-existent pages were clients referred to?"
+    echo "    -5 - What time did the site get the most requests (hour)?"
+    echo "    -6 - What search bots have accessed the site (UA + IP)?"
+    echo "    -h - to display help menu."
+    echo -e "\nExamples:"
+    echo -e "    logscan -3 /home/mike/apache_logs.txt\n        - to scan log with key number 3."
+    echo -e "    logscan -5 /home/mike/apache/apache1.log\n        - to scan log with key number 5.\n"
+}
+
+one () {
+    echo "From which IP were the most requests?"
+    target=$1
+    awk '{ print $1 }' $target | sort | uniq -c | sort -n | tail -n 1 | awk '{ print $2 }'
+}
+
+two () {
+    echo "What is the most requested page?"
+    target=$1
+    awk '{ print $7 }' $target | sort | uniq -c | sort -n | tail -n 1 | awk '{ print $2 }'
+}
+
+three () {
+    echo "How many requests were there from each IP?"
+    target=$1
+    awk '{ print $1 }' $target | sort | uniq -c | sort -nr
+}
+
+four () {
+    echo "What non-existent pages were clients referred to?"
+    target=$1
+    grep "error404\| 404 " $target | awk '{ print $7 }' | sort | uniq -c | sort -nr | awk '{ print $2 }'
+}
+
+five () {
+    echo "What time did the site get the most requests (hour)?"
+    target=$1
+    awk '{ print $4 }' $target | sed 's/:/\t/g' | awk '{ print $2 }' | sort | uniq -c | sort -n | tail -n 1 | awk '{ print $2 }'
+}
+
+six () {
+    echo "What search bots have accessed the site (UA + IP)?"
+    target=$1
+    awk '{for (i=1;i<=NF;i++){if ($i~/bot/ || $i~/Bot/){print $1,$i}}}' $target | sort | uniq | grep -v "robots\|robot\|botoks\|boteksa\|SBotJ"
+    #grep -oi "\w*bot\w*" $target | sort | uniq
+}
+
+if [ "$#" == 0 ]
+    then description
+elif [ ! -e "$2" ] && [ ! -z "$2" ] && [ ! "$1" == "-h" ]
+    then echo -e "\nERROR! This file or directory doesn't exist. You need to type the path more carefully.\n"
+elif [ "$1" == "-1" ] && [ ! -z "$2" ]
+    then one $2
+elif [ "$1" == "-2" ] && [ ! -z "$2" ]
+    then two $2
+elif [ "$1" == "-3" ] && [ ! -z "$2" ]
+    then three $2
+elif [ "$1" == "-4" ] && [ ! -z "$2" ]
+    then four $2
+elif [ "$1" == "-5" ] && [ ! -z "$2" ]
+    then five $2
+elif [ "$1" == "-6" ] && [ ! -z "$2" ]
+    then six $2
+elif [ "$1" == "-h" ]
+    then description
+else
+    echo -e "\nERROR! You need to read the help menu more carefully."; description
+fi

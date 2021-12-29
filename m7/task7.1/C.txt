@@ -1,0 +1,85 @@
+touch backup_f
+chmod ugo+x ./backup_f
+
+./backup_d /home/mike/mike_src/ /home/mike/mike_dst/
+crontab -e
+[*/1 * * * * /home/mike/backup_d /home/mike/mike_src/ /home/mike/mike_dst/]
+crontab -l
+
+#!/bin/bash
+
+description () {
+    echo -e "\nThis script is designed to make a backup from one directory to another."
+    echo -e "\nSynopsis:"
+    echo "    backup_d <path to source dir> <path to destination dir>"
+    echo -e "\nExamples:"
+    echo "    backup_d /home/mike/source/ /home/mike/destination/"
+    echo -e "    backup_d -h\n"
+}
+
+backup () {
+    src=$1
+    dst=$2
+    log=$dst"backup_d.log"
+    temp_d=$dst".temp/"
+    temp=$temp_d"temp"
+    temp2=$temp_d"temp2"
+    temp3=$temp_d"temp3"
+    time=$(date "+[%d/%m/%Y-%H:%M:%S]")
+    
+    if [ ! -d $temp_d ]
+        then mkdir $temp_d
+    fi
+    
+    if [ ! -e $log ]
+        then touch $log
+    fi
+    
+    if [ ! -e $temp ]
+        then touch $temp
+    fi
+    
+    if [ ! -e $temp2 ]
+        then touch $temp2
+    fi
+    
+    if [ ! -e $temp3 ]
+        then touch $temp3
+    fi
+    
+    for file in `find $src -type f -name "*"`
+        do echo $file
+    done > $temp
+    
+    diff $temp $temp2 | grep "<" | awk -F"/" '{print $NF}' > $temp3
+    while read line; do
+    echo "$time Added $line" >> $log
+    done < $temp3
+    
+    diff $temp $temp2 | grep ">" | awk -F"/" '{print $NF}' > $temp3
+    while read line; do
+    echo "$time Deleted $line" >> $log
+    done < $temp3
+    
+    for file in `find $dst -type f -name "*"`
+        do echo $file
+    done > $temp3
+    
+    diff $temp $temp3 | grep "<" | awk '{print $2}' > $temp3
+    while read line; do
+    cp $line $dst
+    done < $temp3
+    
+    cat $temp > $temp2
+    
+}
+
+if [ "$#" == 0 ]
+    then description
+elif [ -d "$1" ] && [ -d "$2" ]
+    then backup $1 $2
+elif [ "$1" == "-h" ]
+    then description
+else
+    echo -e "\nERROR! You need to read the help menu more carefully."; description
+fi

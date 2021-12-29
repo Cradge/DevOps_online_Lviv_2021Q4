@@ -1,0 +1,54 @@
+touch netscan
+chmod ugo+x ./netscan
+
+nc -z -v -w 1 $target $ports 2>&1 | grep succeeded
+for i in {1..254}; do timeout 0.1 ping -c 1 -W 1 192.168.0.$i | grep 'from'; done
+
+#!/bin/bash
+
+description () {
+    echo -e "\nThis script is designed to check network host/port availability.\n\nNote! You must install Nmap to use this script (sudo apt install nmap)."
+    echo -e "\nSynopsis:"
+    echo "    netscan --option <target>"
+    echo -e "\nThere are 3 possible keys:"
+    echo "    --all - to display available network hosts in a certain subnet."
+    echo "    --target - to display available network ports on a certain host."
+    echo "    --help - to display help menu."
+    echo -e "\nExamples:"
+    echo -e "    netscan --all 192.168.1.0/24\n        - to display available network hosts in the 192.168.1.0/24 subnet."
+    echo -e "    netscan --target 192.168.1.1\n        - to display available network ports on the target host.\n"
+}
+
+netscan () {
+    target=$1
+    nmapcheck="/usr/bin/nmap"
+    
+    if [ -e "$nmapcheck" ]
+        then nmap -sP $target | grep report | awk ' {print $5,$6} '
+    else
+        echo -e "\nERROR! You must install Nmap to use this script (sudo apt install nmap).\n"
+    fi
+}
+
+portscan () {
+    target=$1
+    nmapcheck="/usr/bin/nmap"
+    
+    if [ -e "$nmapcheck" ]
+        then nmap $target | grep open
+    else
+        echo -e "\nERROR! You must install Nmap to use this script (sudo apt install nmap).\n"
+    fi
+}
+
+if [ "$#" == 0 ]
+    then description
+elif [ "$1" == "--all" ]
+    then netscan $2
+elif [ "$1" == "--target" ]
+    then portscan $2
+elif [ "$1" == "--help" ]
+    then description
+else
+    echo -e "\nERROR! You need to read the help menu more carefully."; description
+fi

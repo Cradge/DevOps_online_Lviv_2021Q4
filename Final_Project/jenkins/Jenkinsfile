@@ -1,0 +1,175 @@
+pipeline {
+    environment {
+        imageName = "cradge/petclinic"
+        registryCredential = 'dockerhub_cred'
+        dockerImage = ''
+    }
+    options {
+        buildDiscarder (logRotator(artifactNumToKeepStr: '10', numToKeepStr: '10'))
+    }
+    
+    agent { label 'main' }
+    stages {
+        
+        stage('Prepare') {
+            steps {
+                sh 'whoami'
+                sh 'pwd'
+                sh 'docker container ls'
+                sh 'cp /var/jenkins_home/.provision/default.yml /var/jenkins_home/workspace/CICD_Pipeline/ansible/default.yml'
+                sh 'tree'
+                dir('docker') {
+                    dir('build_maven') {
+                        sh 'docker build --tag build_maven .'
+                    }
+                }
+                dir('docker') {
+                    dir('terraform') {
+                        sh 'docker build --tag terraform .'
+                    }
+                }
+                dir('docker') {
+                    dir('ansible') {
+                        sh 'docker build --tag ansible .'
+                    }
+                }
+                sh 'docker images'
+            }
+        }
+        
+        stage('Build') {
+            steps {
+                dir('source') {
+                    dir('spring-petclinic') {
+                        sh 'docker run --rm -i -v jenkins_home:/home/jenkins_home -w /home/jenkins_home/workspace/CICD_Pipeline/source/spring-petclinic -v maven_dep:/root/.m2 build_maven:latest ./mvnw package -DskipTests'
+                    }
+                }
+            }
+        }
+        
+        stage('Test') {
+            steps {
+                dir('source') {
+                    dir('spring-petclinic') {
+                        sh 'docker run --rm -i -v jenkins_home:/home/jenkins_home -w /home/jenkins_home/workspace/CICD_Pipeline/source/spring-petclinic -v maven_dep:/root/.m2 build_maven:latest ./mvnw test'
+                        sh 'docker run --rm -i -v jenkins_home:/home/jenkins_home -w /home/jenkins_home/workspace/CICD_Pipeline/source/spring-petclinic -v maven_dep:/root/.m2 build_maven:latest ./mvnw surefire-report:report-only'
+                        sh 'docker run --rm -i -v jenkins_home:/home/jenkins_home -w /home/jenkins_home/workspace/CICD_Pipeline/source/spring-petclinic -v maven_dep:/root/.m2 build_maven:latest ./mvnw site -DgenerateReports=false'
+                    }
+                }
+            }
+            post {
+                always {
+                    junit 'source/spring-petclinic/target/surefire-reports/*.xml'
+                    archiveArtifacts artifacts: 'source/spring-petclinic/target/*.jar', onlyIfSuccessful: true
+                    archiveArtifacts artifacts: 'source/spring-petclinic/target/site/surefire-report.html', onlyIfSuccessful: true
+                    sh 'tree'
+                }
+            }
+        }
+        
+        stage('Push artifact on DockerHub') {
+            steps {
+                dir('source') {
+                    dir('spring-petclinic') {
+                        dir('target') {
+                            sh 'cp *.jar /var/jenkins_home/workspace/CICD_Pipeline/docker/artifact/app.jar'
+                        }
+                    }
+                }
+                dir('docker') {
+                    dir('artifact') {
+                        script {
+                            dockerImage = docker.build imageName
+                            docker.withRegistry( '', registryCredential ) {
+                                dockerImage.push('latest')
+                            }
+                        }
+                        sh 'docker images'
+                    }
+                }
+            }
+            post {
+                always {
+                    sh 'docker rmi cradge/petclinic'
+                }
+            }
+        }
+        
+        stage('Initialize infrastructure') {
+            agent {
+                docker {
+                    image 'terraform:latest'
+                    args '-v jenkins_home:/home/jenkins_home'
+                }
+            }
+            steps {
+                sh 'pwd'
+                dir('terraform') {
+                    withAWS(credentials: 'terraform_for_aws', region: 'us-east-2') {
+                        sh 'cp /var/jenkins_home/.provision/public.tf $(pwd)/public.tf'
+                        sh 'terraform init'
+                        sh 'terraform apply --auto-approve'
+                        sh 'terraform output > /var/jenkins_home/workspace/CICD_Pipeline/ansible/output'
+                    }
+                }
+            }
+            post {
+                always {
+                    cleanWs()
+                }
+            }
+        }
+        
+        stage('Configure dev environment') {
+            steps {
+                dir('ansible') {
+                    sh 'chmod +x output_ip'
+                    sh './output_ip'
+                    sh 'cat hosts'
+                    sh 'docker run --rm -i -v jenkins_home:/home/jenkins_home -w /home/jenkins_home/workspace/CICD_Pipeline/ansible -e ANSIBLE_LOCAL_TEMP=/home/.ansible ansible:latest ansible-playbook provision.yml --limit dev'
+                }
+            }
+        }
+        
+        stage('Configure prod environment') {
+            input {
+                message "Do you really want to push a new snapshot on the Production Server?"
+            }
+            steps {
+                dir('ansible') {
+                    sh 'docker run --rm -i -v jenkins_home:/home/jenkins_home -w /home/jenkins_home/workspace/CICD_Pipeline/ansible -e ANSIBLE_LOCAL_TEMP=/home/.ansible ansible:latest ansible-playbook provision.yml --limit prod'
+                }
+                sh 'cat /var/jenkins_home/workspace/CICD_Pipeline/ansible/output'
+            }
+        }
+    }
+    
+    post {
+        always {
+            sh 'tree'
+            cleanWs()
+        }
+        success {
+            sh 'echo The servers are successfully deployed'
+            withCredentials([string(credentialsId: 'tokenID', variable: 'TOKEN'), string(credentialsId: 'chatID', variable: 'CHAT_ID')]) {
+                sh ("""
+                    curl -s -X POST https://api.telegram.org/bot${TOKEN}/sendMessage -d chat_id=${CHAT_ID} -d parse_mode=markdown -d text='*${env.JOB_NAME}*; *Pipeline*: `OK`'
+                """)
+            }
+        }
+        aborted {
+            withCredentials([string(credentialsId: 'tokenID', variable: 'TOKEN'), string(credentialsId: 'chatID', variable: 'CHAT_ID')]) {
+                sh ("""
+                    curl -s -X POST https://api.telegram.org/bot${TOKEN}/sendMessage -d chat_id=${CHAT_ID} -d parse_mode=markdown -d text='*${env.JOB_NAME}*; *Pipeline*: `Aborted`'
+                """)
+            }
+        }
+        failure {
+            withCredentials([string(credentialsId: 'tokenID', variable: 'TOKEN'), string(credentialsId: 'chatID', variable: 'CHAT_ID')]) {
+                sh ("""
+                    curl -s -X POST https://api.telegram.org/bot${TOKEN}/sendMessage -d chat_id=${CHAT_ID} -d parse_mode=markdown -d text='*${env.JOB_NAME}*; *Pipeline*: `not OK`'
+                """)
+            }
+        }
+    }
+}

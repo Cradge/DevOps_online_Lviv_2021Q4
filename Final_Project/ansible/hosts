@@ -1,0 +1,7 @@
+[dev]
+
+[prod]
+
+[same_cred:children]
+dev
+prod

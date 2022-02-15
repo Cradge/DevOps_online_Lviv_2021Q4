@@ -1,0 +1,68 @@
+pipeline {
+    
+    agent { label 'main' }
+    stages {
+        
+        stage('Prepare') {
+            steps {
+                sh 'whoami'
+                sh 'pwd'
+                sh 'docker container ls'
+                sh 'tree'
+                dir('docker') {
+                    dir('terraform') {
+                        sh 'docker build --tag terraform .'
+                    }
+                }
+                sh 'docker images'
+            }
+        }
+
+        stage('Infrastructure Destroy') {
+            agent {
+                docker {
+                    image 'terraform:latest'
+                    args '-v jenkins_home:/home/jenkins_home'
+                }
+            }
+            steps {
+                sh 'pwd'
+                dir('terraform') {
+                    withAWS(credentials: 'terraform_for_aws', region: 'us-east-2') {
+                        sh 'cp /var/jenkins_home/.provision/public.tf $(pwd)/public.tf'
+                        sh 'terraform init'
+                        sh 'terraform destroy --auto-approve'
+                    }
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            cleanWs()
+        }
+        success {
+            sh 'echo The servers are successfully destroyed'
+            withCredentials([string(credentialsId: 'tokenID', variable: 'TOKEN'), string(credentialsId: 'chatID', variable: 'CHAT_ID')]) {
+                sh ("""
+                    curl -s -X POST https://api.telegram.org/bot${TOKEN}/sendMessage -d chat_id=${CHAT_ID} -d parse_mode=markdown -d text='*${env.JOB_NAME}*; *Destroy*: `OK`'
+                """)
+            }
+        }
+        aborted {
+            withCredentials([string(credentialsId: 'tokenID', variable: 'TOKEN'), string(credentialsId: 'chatID', variable: 'CHAT_ID')]) {
+                sh ("""
+                    curl -s -X POST https://api.telegram.org/bot${TOKEN}/sendMessage -d chat_id=${CHAT_ID} -d parse_mode=markdown -d text='*${env.JOB_NAME}*; *Destroy*: `Aborted`'
+                """)
+            }
+        }
+        failure {
+            withCredentials([string(credentialsId: 'tokenID', variable: 'TOKEN'), string(credentialsId: 'chatID', variable: 'CHAT_ID')]) {
+                sh ("""
+                    curl -s -X POST https://api.telegram.org/bot${TOKEN}/sendMessage -d chat_id=${CHAT_ID} -d parse_mode=markdown -d text='*${env.JOB_NAME}*; *Destroy*: `not OK`'
+                """)
+            }
+        }
+    }
+}

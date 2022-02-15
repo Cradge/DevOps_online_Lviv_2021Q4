@@ -1,0 +1,66 @@
+---
+- name: Provision for development/production servers
+  hosts: all
+  become: yes
+  vars_files:
+    - default.yml
+
+  tasks:
+  - name: Update apt packages
+    apt:
+      update_cache: yes
+
+  - name: Install required system packages
+    apt: name={{ item }} state=latest update_cache=yes
+    loop: [ 'ca-certificates', 'curl', 'gnupg', 'lsb-release', 'python3-pip' ]
+
+  - name: Add Docker GPG apt Key
+    apt_key:
+      url: https://download.docker.com/linux/ubuntu/gpg
+      state: present
+
+  - name: Add Docker Repository
+    apt_repository:
+      repo: deb https://download.docker.com/linux/ubuntu focal stable
+      state: present
+
+  - name: Update apt packages
+    apt:
+      update_cache: yes
+
+  - name: Install Docker
+    apt: name={{ item }} state=latest update_cache=yes
+    loop: [ 'docker-ce', 'docker-ce-cli', 'containerd.io' ]
+
+  - name: Install Docker module for Python
+    pip:
+      name: docker
+
+  - name: Log into DockerHub
+    docker_login:
+      username: "{{ docker_login }}"
+      password: "{{ docker_password }}"
+
+  - name: Get a list of all running containers
+    docker_host_info:
+      containers: True
+    register: docker_info
+
+  - name: Stop all running containers (if any)
+    docker_container:
+      name: '{{ item.Names[0] | regex_replace("^/", "") }}'
+      state: stopped
+    loop: '{{ docker_info.containers }}'
+
+  - name: Prune everything
+    community.docker.docker_prune:
+      containers: yes
+      images: yes
+      images_filters:
+        dangling: false
+      networks: yes
+      volumes: yes
+      builder_cache: yes
+
+  - name: Start Petclinic
+    command: "sudo docker run --rm -d -p 80:8080 --name petclinic cradge/petclinic"
